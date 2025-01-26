@@ -23,14 +23,14 @@ const parseResponse = (response, dataField) => {
   return parsedData[dataField];
 };
 
-export const fetchLatestData = async (deviceId) => {
+export const fetchLatestData = async (deviceId, signal) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
 
   try {
     const response = await axios.get(`${API_BASE_URL}/latest`, {
       params: { device_id: deviceId },
-      signal: controller.signal,
+      signal: signal || controller.signal, // Use provided signal or create new
       validateStatus: (status) => status === 200,
     });
 
@@ -63,17 +63,20 @@ export const fetchLatestData = async (deviceId) => {
     };
   } catch (error) {
     clearTimeout(timeoutId);
-    return {
-      temperature: 'N/A',
-      humidity: 'N/A',
-      pm25: 'N/A',
-      sourceTime: 'N/A',
-      timestamp: 'N/A'
-    };
+    if (error.name !== 'CanceledError') {
+      return {
+        temperature: 'N/A',
+        humidity: 'N/A',
+        pm25: 'N/A',
+        sourceTime: 'N/A',
+        timestamp: 'N/A'
+      };
+    }
+    throw error; // Re-throw cancellation errors
   }
 };
 
-export const fetchHistoricalData = async (deviceId, startTime = null, endTime = null) => {
+export const fetchHistoricalData = async (deviceId, startTime = null, endTime = null, signal) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
 
@@ -84,7 +87,7 @@ export const fetchHistoricalData = async (deviceId, startTime = null, endTime = 
 
     const response = await axios.get(`${API_BASE_URL}/historical`, {
       params,
-      signal: controller.signal,
+      signal: signal || controller.signal, // Use provided signal or create new
       validateStatus: (status) => status === 200,
     });
 
@@ -92,21 +95,21 @@ export const fetchHistoricalData = async (deviceId, startTime = null, endTime = 
     return parseResponse(response, 'historical_data');
   } catch (error) {
     clearTimeout(timeoutId);
-    return handleApiError(error);
+    if (error.name !== 'CanceledError') {
+      return handleApiError(error);
+    }
+    throw error; // Re-throw cancellation errors
   }
 };
 
 export const processHistoricalData = (rawData) => {
   return rawData
     .map((entry) => {
-      // Use source_time if available, otherwise timestamp
       const entryTime = entry.source_time || entry.timestamp;
       
       return {
-        // Keep original timestamp without conversion
         date: entryTime,
-        // Use raw PM2.5 value (no averaging)
-        value: Number(entry.pm25)
+        value: Number(entry.pm25) || 0 // Default to 0 if NaN
       };
     })
     .sort((a, b) => new Date(a.date) - new Date(b.date));

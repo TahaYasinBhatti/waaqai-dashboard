@@ -1,32 +1,54 @@
 // src/pages/Login.js
-import React, { useState } from 'react';
+// In Login.js
+import React, { useState, useEffect } from 'react'; // Add useEffect here
 import { useNavigate } from 'react-router-dom';
-import { users } from '../data/users'; // Import user data
-
+import { users } from '../data/users';
 const Login = () => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
-
-  const handleLogin = (e) => {
-    e.preventDefault();
-
-    // Find the user in the list
-    const user = users.find(
-      (u) => u.username === username && u.password === password
-    );
-
-    if (user) {
-      // Store user data in localStorage
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('userRole', user.role);
-      localStorage.setItem('userDevices', JSON.stringify(user.devices));
-      navigate('/dashboard');
-    } else {
-      setError('Invalid username or password');
-    }
-  };
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const navigate = useNavigate();
+  
+    // Clear any existing auth state on mount
+    useEffect(() => {
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('userRole');
+      localStorage.removeItem('userDevices');
+    }, []);
+  
+    const handleLogin = async (e) => {
+      e.preventDefault();
+  
+      try {
+        const user = users.find(
+          u => u.username === username && u.password === password
+        );
+  
+        if (!user) {
+          throw new Error('Invalid credentials');
+        }
+  
+        // Use Promise.all for parallel storage operations
+        await Promise.all([
+          localStorage.setItem('isAuthenticated', 'true'),
+          localStorage.setItem('userRole', user.role),
+          localStorage.setItem('userDevices', JSON.stringify(user.devices))
+        ]);
+  
+        // Force state update across browser tabs
+        window.dispatchEvent(new Event('storage'));
+        
+        // Add slight delay for state propagation
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        navigate('/dashboard', { replace: true });
+  
+      } catch (err) {
+        setError(err.message);
+        // Clear auth state on failure
+        localStorage.removeItem('isAuthenticated');
+      }
+    };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">

@@ -33,12 +33,18 @@ const Dashboard = () => {
   const [dateRange, setDateRange] = useState('24hours');
   const selectedDeviceLocation = deviceLocations.find((device) => device.id === selectedDevice);
 
-  // Fetch real-time data with enhanced validation
-  const fetchRealTimeData = async () => {
-    try {
-      const realTime = await fetchLatestData(selectedDevice);
+  // Authentication check
+  useEffect(() => {
+    if (!localStorage.getItem('isAuthenticated')) {
+      navigate('/login', { replace: true });
+    }
+  }, [navigate]);
 
-      // Validate all values simultaneously
+  // Fetch real-time data with abort control
+  const fetchRealTimeData = async (signal) => {
+    try {
+      const realTime = await fetchLatestData(selectedDevice, signal);
+
       const isValidData = [realTime.temperature, realTime.humidity, realTime.pm25].every(
         val => !isNaN(val) && val !== 'N/A'
       );
@@ -52,55 +58,78 @@ const Dashboard = () => {
           : new Date(realTime.sourceTime).toLocaleString()
       });
     } catch (err) {
-      setError(err.message);
-      setRealTimeData({
-        temperature: 'N/A',
-        humidity: 'N/A',
-        pm25: 'N/A',
-        lastModified: 'N/A'
-      });
+      if (err.name !== 'CanceledError') {
+        setError(err.message);
+        setRealTimeData({
+          temperature: 'N/A',
+          humidity: 'N/A',
+          pm25: 'N/A',
+          lastModified: 'N/A'
+        });
+      }
     }
   };
 
-  // Fetch historical data
-  const fetchAndSetHistoricalData = async (startTime = null, endTime = null) => {
+  // Fetch historical data with abort control
+  const fetchAndSetHistoricalData = async (startTime, endTime, signal) => {
     try {
       setLoading(true);
       setError(null);
-      const rawData = await fetchHistoricalData(selectedDevice, startTime, endTime);
+      const rawData = await fetchHistoricalData(selectedDevice, startTime, endTime, signal);
       setChartData(processHistoricalData(rawData));
     } catch (err) {
-      setError(err.message);
-      setChartData([]);
+      if (err.name !== 'CanceledError') {
+        setError(err.message);
+        setChartData([]);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Main data fetch effect with state reset
+  // Main data fetch effect with proper cleanup
   useEffect(() => {
-    // Immediate state reset on device change
-    setRealTimeData({
-      temperature: 'N/A',
-      humidity: 'N/A',
-      pm25: 'N/A',
-      lastModified: 'N/A'
-    });
+    const abortController = new AbortController();
+    let isMounted = true;
 
     const fetchData = async () => {
-      const now = new Date();
-      await fetchRealTimeData();
-      await fetchAndSetHistoricalData(
-        new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
-        now.toISOString()
-      );
+      try {
+        setRealTimeData({
+          temperature: 'N/A',
+          humidity: 'N/A',
+          pm25: 'N/A',
+          lastModified: 'N/A'
+        });
+
+        const now = new Date();
+        await fetchRealTimeData(abortController.signal);
+        
+        if (isMounted) {
+          await fetchAndSetHistoricalData(
+            new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+            now.toISOString(),
+            abortController.signal
+          );
+        }
+      } catch (err) {
+        if (isMounted && err.name !== 'CanceledError') {
+          setError('Failed to load device data');
+        }
+      }
     };
 
+    setLoading(true);
     fetchData();
 
-    // Polling with cleanup
-    const pollingInterval = setInterval(fetchRealTimeData, 120000);
-    return () => clearInterval(pollingInterval);
+    const pollingInterval = setInterval(() => {
+      fetchRealTimeData(abortController.signal);
+    }, 120000);
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      clearInterval(pollingInterval);
+    };
   }, [selectedDevice]);
 
   // Date range handler
@@ -108,15 +137,12 @@ const Dashboard = () => {
     const range = event.target.value;
     setDateRange(range);
     const now = new Date();
-    let startTime = null;
-
     const ranges = {
       '24hours': 24,
       '7days': 7 * 24,
       '30days': 30 * 24
     };
-
-    startTime = new Date(now.getTime() - (ranges[range] || 24) * 60 * 60 * 1000).toISOString();
+    const startTime = new Date(now.getTime() - (ranges[range] || 24) * 60 * 60 * 1000).toISOString();
     fetchAndSetHistoricalData(startTime, now.toISOString());
   };
 
@@ -127,11 +153,10 @@ const Dashboard = () => {
     navigate('/login');
   };
 
-  // UI components remain the same
   return (
-    <div className="min-h-screen bg-gray-50 p-6 flex items-start">
+    <div className="min-h-screen bg-gray-50 p-6 flex flex-col lg:flex-row items-start gap-6">
       {/* Left Image Section */}
-      <div className="hidden lg:flex flex-col justify-center items-center space-y-4 w-[250px]">
+      <div className="w-full lg:w-[250px] flex-shrink-0">
         <img
           src="https://img.freepik.com/premium-photo/photo-environmental-stewardship-co2-reduction-concept-with-trees-promoting-clean-air-vertical-mobil_896558-37844.jpg"
           alt="Clean Air Illustration"
@@ -143,7 +168,7 @@ const Dashboard = () => {
       </div>
 
       {/* Main Dashboard Content */}
-      <div className="flex-grow max-w-7xl mx-auto space-y-6">
+      <div className="flex-1 w-full max-w-7xl mx-auto space-y-6">
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <h1 className="text-2xl font-bold text-gray-800 mb-4 md:mb-0">Waaqai Dashboard</h1>
@@ -169,7 +194,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Metrics Cards with Dials */}
+        {/* Metrics Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <DataCard title="Temperature" color="text-orange-500" icon={<FaTemperatureHigh />}>
             <div className="h-40">
@@ -262,7 +287,7 @@ const Dashboard = () => {
       </div>
 
       {/* Right Image Section */}
-      <div className="hidden lg:flex flex-col justify-center items-center space-y-4 w-[250px]">
+      <div className="w-full lg:w-[250px] flex-shrink-0">
         <img
           src="https://media.istockphoto.com/id/650754962/vector/ecology-air-and-atmosphere-pollution.jpg?s=612x612&w=0&k=20&c=TZhrkmjUly1hgIW3oMwYt2x9J6vui_LTYAYCfqpJpt4="
           alt="Pollution Illustration"
