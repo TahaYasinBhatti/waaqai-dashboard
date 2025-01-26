@@ -31,7 +31,10 @@ const Dashboard = () => {
   const [error, setError] = useState(null);
   const [chartData, setChartData] = useState([]);
   const [dateRange, setDateRange] = useState('24hours');
-  const selectedDeviceLocation = deviceLocations.find((device) => device.id === selectedDevice);
+  
+  const selectedDeviceLocation = deviceLocations.find(
+    (device) => device.id.toString() === selectedDevice.toString()
+  );
 
   // Authentication check
   useEffect(() => {
@@ -132,6 +135,17 @@ const Dashboard = () => {
     };
   }, [selectedDevice]);
 
+  // Handle device not found error
+  if (!selectedDeviceLocation) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="bg-red-100 border-red-400 text-red-700 p-4 rounded-lg">
+          Error: Device {selectedDevice} not found in registry
+        </div>
+      </div>
+    );
+  }
+
   // Date range handler
   const handleDateRangeChange = (event) => {
     const range = event.target.value;
@@ -156,7 +170,7 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-6 flex flex-col lg:flex-row items-start gap-6">
       {/* Left Image Section */}
-      <div className="w-full lg:w-[250px] flex-shrink-0">
+      <div className="hidden lg:flex flex-col justify-center items-center space-y-4 w-[250px]">
         <img
           src="https://img.freepik.com/premium-photo/photo-environmental-stewardship-co2-reduction-concept-with-trees-promoting-clean-air-vertical-mobil_896558-37844.jpg"
           alt="Clean Air Illustration"
@@ -237,13 +251,14 @@ const Dashboard = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white p-4 rounded-xl shadow-sm h-[500px]">
             <h2 className="text-lg font-bold text-gray-700 mb-4">
-              {selectedDeviceLocation?.locationTitle || 'Device Location'}
+              {selectedDeviceLocation.locationTitle}
             </h2>
             <Heatmap
+              key={selectedDevice}
               pm25Value={realTimeData.pm25}
               coordinates={[
-                selectedDeviceLocation?.lat || 31.5204,
-                selectedDeviceLocation?.lng || 74.3587,
+                selectedDeviceLocation.lat,
+                selectedDeviceLocation.lng
               ]}
             />
           </div>

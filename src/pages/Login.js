@@ -17,38 +17,38 @@ const Login = () => {
     }, []);
   
     const handleLogin = async (e) => {
-      e.preventDefault();
-  
-      try {
-        const user = users.find(
-          u => u.username === username && u.password === password
-        );
-  
-        if (!user) {
-          throw new Error('Invalid credentials');
+        e.preventDefault();
+      
+        try {
+          const user = users.find(
+            u => u.username === username && u.password === password
+          );
+      
+          if (!user) {
+            throw new Error('Invalid credentials');
+          }
+      
+          // Use Promise.all for parallel storage operations
+          await Promise.all([
+            localStorage.setItem('isAuthenticated', 'true'),
+            localStorage.setItem('userRole', user.role),
+            localStorage.setItem('userDevices', JSON.stringify(user.devices))
+          ]);
+      
+          // Force state update across browser tabs
+          window.dispatchEvent(new Event('storage'));
+      
+          // Add slight delay for state propagation
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
+          navigate('/dashboard', { replace: true });
+      
+        } catch (err) {
+          setError(err.message);
+          // Clear auth state on failure
+          localStorage.removeItem('isAuthenticated');
         }
-  
-        // Use Promise.all for parallel storage operations
-        await Promise.all([
-          localStorage.setItem('isAuthenticated', 'true'),
-          localStorage.setItem('userRole', user.role),
-          localStorage.setItem('userDevices', JSON.stringify(user.devices))
-        ]);
-  
-        // Force state update across browser tabs
-        window.dispatchEvent(new Event('storage'));
-        
-        // Add slight delay for state propagation
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
-        navigate('/dashboard', { replace: true });
-  
-      } catch (err) {
-        setError(err.message);
-        // Clear auth state on failure
-        localStorage.removeItem('isAuthenticated');
-      }
-    };
+      };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
