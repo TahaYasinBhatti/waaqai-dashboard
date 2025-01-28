@@ -9,17 +9,27 @@ import Dial from '../components/Dial';
 import Heatmap from '../components/Heatmap';
 import { devices as deviceLocations } from '../data/devices';
 
+
+const getCookie = (name) => {
+  const cookies = document.cookie.split('; ');
+  const cookie = cookies.find(row => row.startsWith(name + '='));
+  return cookie ? decodeURIComponent(cookie.split('=')[1]) : null;
+};
 const Dashboard = () => {
   const navigate = useNavigate();
-  const userRole = localStorage.getItem('userRole');
-  const userDevices = JSON.parse(localStorage.getItem('userDevices')) || [];
+  const userRole = getCookie('userRole') || localStorage.getItem('userRole');
+  const userDevices = JSON.parse(getCookie('userDevices') || '[]');
   const allDevices = Array.from({ length: 20 }, (_, i) => ({
     label: `Device ${i + 1}`,
     value: String(i + 1),
   }));
 
   // State management
-  const filteredDevices = userRole === 'admin' ? allDevices : allDevices.filter((device) => userDevices.includes(device.label));
+  const filteredDevices = userRole === 'admin' 
+    ? allDevices 
+    : allDevices.filter(device => 
+        userDevices.some(userDevice => userDevice === device.label)
+      );
   const [selectedDevice, setSelectedDevice] = useState(filteredDevices[0]?.value || '1');
   const [realTimeData, setRealTimeData] = useState({
     temperature: 'N/A',
@@ -38,7 +48,7 @@ const Dashboard = () => {
 
   // Authentication check
   useEffect(() => {
-    if (!localStorage.getItem('isAuthenticated')) {
+    if (!getCookie('isAuthenticated') && !localStorage.getItem('isAuthenticated')) {
       navigate('/login', { replace: true });
     }
   }, [navigate]);
@@ -161,158 +171,109 @@ const Dashboard = () => {
   };
 
   const handleLogout = () => {
+    // Clear cookies
+    document.cookie = 'isAuthenticated=; max-age=0; path=/';
+    document.cookie = 'userRole=; max-age=0; path=/';
+    document.cookie = 'userDevices=; max-age=0; path=/';
+  
+    // Clear localStorage
     localStorage.removeItem('isAuthenticated');
     localStorage.removeItem('userRole');
     localStorage.removeItem('userDevices');
+  
     navigate('/login');
   };
-
+  
   return (
-    <div className="min-h-screen bg-gray-50 p-6 flex flex-col lg:flex-row items-start gap-6">
-      {/* Left Image Section */}
-      <div className="hidden lg:flex flex-col justify-center items-center space-y-4 w-[250px]">
-        <img
-          src="https://img.freepik.com/premium-photo/photo-environmental-stewardship-co2-reduction-concept-with-trees-promoting-clean-air-vertical-mobil_896558-37844.jpg"
-          alt="Clean Air Illustration"
-          className="w-full h-[300px] object-cover rounded-lg shadow-md"
-        />
-        <p className="text-center text-gray-500 text-sm">
-          Breathe clean, live green 🌱
-        </p>
-      </div>
+ <div className="min-h-screen bg-gray-50 p-4 flex flex-col lg:flex-row items-start gap-4">
+  {/* Left Image Section */}
+  <div className="hidden lg:flex flex-col justify-center items-center space-y-2 w-[220px] flex-shrink-0">
+    <img
+      src="/Laaca.jpg"
+      alt="Clean Air Illustration"
+      className="w-full h-[250px] object-cover rounded-lg shadow-md"
+    />
+    <p className="text-center text-gray-500 text-sm">Breathe clean, live green 🌱</p>
+  </div>
 
-      {/* Main Dashboard Content */}
-      <div className="flex-1 w-full max-w-7xl mx-auto space-y-6">
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-          <h1 className="text-2xl font-bold text-gray-800 mb-4 md:mb-0">Waaqai Dashboard</h1>
-          <div className="flex items-center space-x-4">
-            <DeviceDropdown
-              devices={filteredDevices}
-              selectedDevice={selectedDevice}
-              onDeviceChange={setSelectedDevice}
-            />
-            <button
-              onClick={handleLogout}
-              className="bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-
-        {/* Error Display */}
-        {error && (
-          <div className="bg-red-100 border-red-400 text-red-700 p-4 rounded-lg">
-            <p className="font-medium">{error}</p>
-          </div>
-        )}
-
-        {/* Metrics Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <DataCard title="Temperature" color="text-orange-500" icon={<FaTemperatureHigh />}>
-            <div className="h-40">
-              <Dial
-                value={realTimeData.temperature}
-                min={-10}
-                max={50}
-                unit="°C"
-                colors={['#0000FF', '#00FFFF', '#00FF00', '#FFFF00', '#FFA500', '#FF0000']}
-              />
-            </div>
-          </DataCard>
-
-          <DataCard title="Humidity" color="text-blue-500" icon={<FaWater />}>
-            <div className="h-40">
-              <Dial
-                value={realTimeData.humidity}
-                min={0}
-                max={100}
-                unit="%"
-                colors={['#ADD8E6', '#87CEEB', '#4682B4', '#000080']}
-              />
-            </div>
-          </DataCard>
-
-          <DataCard title="PM 2.5" color="text-red-500" icon={<FaSmog />}>
-            <div className="h-40">
-              <Dial
-                value={realTimeData.pm25}
-                min={0}
-                max={500}
-                unit="µg/m³"
-                colors={['#00E400', '#FFFF00', '#FFA500', '#FF4500', '#8B4513']}
-              />
-            </div>
-          </DataCard>
-        </div>
-
-        {/* Map & Chart Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white p-4 rounded-xl shadow-sm h-[500px]">
-            <h2 className="text-lg font-bold text-gray-700 mb-4">
-              {selectedDeviceLocation.locationTitle}
-            </h2>
-            <Heatmap
-              key={selectedDevice}
-              pm25Value={realTimeData.pm25}
-              coordinates={[
-                selectedDeviceLocation.lat,
-                selectedDeviceLocation.lng
-              ]}
-            />
-          </div>
-
-          <div className="bg-white p-6 rounded-xl shadow-sm">
-            <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between">
-              <div className="mb-2 sm:mb-0">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Select Date Range:
-                </label>
-                <select
-                  className="border border-gray-300 rounded-md p-2 w-full sm:w-48"
-                  onChange={handleDateRangeChange}
-                  value={dateRange}
-                >
-                  <option value="24hours">Last 24 Hours</option>
-                  <option value="7days">Last 7 Days</option>
-                  <option value="30days">Last 30 Days</option>
-                </select>
-              </div>
-              <p className="text-xs text-gray-500">
-                Last Updated: {realTimeData.lastModified}
-              </p>
-            </div>
-            <h2 className="text-lg font-bold text-gray-700 mb-4">PM 2.5 Levels</h2>
-            <div className="h-96">
-              {loading ? (
-                <div className="flex justify-center items-center h-full">
-                  <div className="animate-spin rounded-full h-8 w-8 border-4 border-t-transparent border-blue-500"></div>
-                </div>
-              ) : chartData.length > 0 ? (
-                <LineChart data={chartData} />
-              ) : (
-                <div className="flex items-center justify-center h-full text-gray-500">
-                  No chart data available
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Right Image Section */}
-      <div className="w-full lg:w-[250px] flex-shrink-0">
-        <img
-          src="https://media.istockphoto.com/id/650754962/vector/ecology-air-and-atmosphere-pollution.jpg?s=612x612&w=0&k=20&c=TZhrkmjUly1hgIW3oMwYt2x9J6vui_LTYAYCfqpJpt4="
-          alt="Pollution Illustration"
-          className="w-full h-[300px] object-cover rounded-lg shadow-md"
-        />
-        <p className="text-center text-gray-500 text-sm">
-          Monitor pollution, save lives ❤️
-        </p>
+  {/* Main Dashboard Content */}
+  <div className="flex-1 w-full max-w-6xl mx-auto space-y-4">
+    {/* Header Section */}
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+      <h1 className="text-xl font-bold text-gray-800 mb-2 md:mb-0">WAQAI Dashboard</h1>
+      <div className="flex items-center space-x-3">
+        <DeviceDropdown devices={filteredDevices} selectedDevice={selectedDevice} onDeviceChange={setSelectedDevice} />
+        <button onClick={handleLogout} className="bg-red-500 text-white py-1 px-3 rounded-md hover:bg-red-600">
+          Logout
+        </button>
       </div>
     </div>
+
+    {/* Metrics Cards */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <DataCard title="Temperature" color="text-orange-500" icon={<FaTemperatureHigh />}>
+        <div className="h-32">
+          <Dial value={realTimeData.temperature} min={-10} max={50} unit="°C" colors={['#0000FF', '#00FFFF', '#00FF00', '#FFFF00', '#FFA500', '#FF0000']} />
+        </div>
+      </DataCard>
+
+      <DataCard title="Humidity" color="text-blue-500" icon={<FaWater />}>
+        <div className="h-32">
+          <Dial value={realTimeData.humidity} min={0} max={100} unit="%" colors={['#ADD8E6', '#87CEEB', '#4682B4', '#000080']} />
+        </div>
+      </DataCard>
+
+      <DataCard title="PM 2.5" color="text-red-500" icon={<FaSmog />}>
+        <div className="h-32">
+          <Dial value={realTimeData.pm25} min={0} max={500} unit="µg/m³" colors={['#00E400', '#FFFF00', '#FFA500', '#FF4500', '#8B4513']} />
+        </div>
+      </DataCard>
+    </div>
+
+    {/* Map & Chart Section */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Map */}
+      <div className="bg-white p-3 rounded-xl shadow-sm h-[350px]">
+        <h2 className="text-md font-bold text-gray-700 mb-2">{selectedDeviceLocation.locationTitle}</h2>
+        <Heatmap key={selectedDevice} pm25Value={realTimeData.pm25} coordinates={[selectedDeviceLocation.lat, selectedDeviceLocation.lng]} />
+      </div>
+
+      {/* Chart */}
+      <div className="bg-white p-4 rounded-xl shadow-sm h-[350px]">
+        <div className="flex justify-between items-center mb-3">
+          <label className="block text-sm font-medium text-gray-700">Select Date Range:</label>
+          <select className="border border-gray-300 rounded-md p-1 w-36" onChange={handleDateRangeChange} value={dateRange}>
+            <option value="24hours">Last 24 Hours</option>
+            <option value="7days">Last 7 Days</option>
+            <option value="30days">Last 30 Days</option>
+          </select>
+        </div>
+        <h2 className="text-md font-bold text-gray-700 mb-2">PM 2.5 Levels</h2>
+        <div className="h-40">
+          {loading ? (
+            <div className="flex justify-center items-center h-full">
+              <div className="animate-spin rounded-full h-6 w-6 border-4 border-t-transparent border-blue-500"></div>
+            </div>
+          ) : chartData.length > 0 ? (
+            <LineChart data={chartData} />
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-500">No chart data available</div>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {/* Right Image Section */}
+  <div className="w-[220px] flex-shrink-0">
+    <img
+      src="https://media.istockphoto.com/id/650754962/vector/ecology-air-and-atmosphere-pollution.jpg?s=612x612&w=0&k=20&c=TZhrkmjUly1hgIW3oMwYt2x9J6vui_LTYAYCfqpJpt4="
+      alt="Pollution Illustration"
+      className="w-full h-[250px] object-cover rounded-lg shadow-md"
+    />
+    <p className="text-center text-gray-500 text-sm">Monitor pollution, save lives ❤️</p>
+  </div>
+</div>
   );
 };
 

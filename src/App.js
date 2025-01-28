@@ -4,10 +4,22 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import 'leaflet/dist/leaflet.css';
 
+// Cookie helper function
+const getCookie = (name) => {
+  if (typeof document === 'undefined') return null; // For server-side rendering
+  const cookies = document.cookie.split(';');
+  for (let cookie of cookies) {
+    const [cookieName, cookieValue] = cookie.split('=');
+    if (cookieName.trim() === name) {
+      return decodeURIComponent(cookieValue.trim());
+    }
+  }
+  return null;
+};
 
 function App() {
-  // Check if the user is authenticated
-  const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+  // ✅ Get authentication status from cookies
+  const isAuthenticated = getCookie('isAuthenticated') === 'true';
 
   return (
     <Router>
@@ -21,7 +33,7 @@ function App() {
           element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />}
         />
 
-        {/* Default Route: Redirect to /dashboard if authenticated, else to /login */}
+        {/* Default Route */}
         <Route
           path="/"
           element={isAuthenticated ? <Navigate to="/dashboard" /> : <Navigate to="/login" />}
