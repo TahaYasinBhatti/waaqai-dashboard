@@ -200,7 +200,7 @@ const Dashboard = () => {
   <div className="flex-1 w-full max-w-6xl mx-auto space-y-4">
     {/* Header Section */}
     <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-      <h1 className="text-xl font-bold text-gray-800 mb-2 md:mb-0">WAQAI Dashboard</h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-2 md:mb-0">WAQIA Dashboard</h1>
       <div className="flex items-center space-x-3">
         <DeviceDropdown devices={filteredDevices} selectedDevice={selectedDevice} onDeviceChange={setSelectedDevice} />
         <button onClick={handleLogout} className="bg-red-500 text-white py-1 px-3 rounded-md hover:bg-red-600">
