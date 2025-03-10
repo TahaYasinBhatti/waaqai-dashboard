@@ -9,12 +9,12 @@ import Dial from '../components/Dial';
 import Heatmap from '../components/Heatmap';
 import { devices as deviceLocations } from '../data/devices';
 
-
 const getCookie = (name) => {
   const cookies = document.cookie.split('; ');
   const cookie = cookies.find(row => row.startsWith(name + '='));
   return cookie ? decodeURIComponent(cookie.split('=')[1]) : null;
 };
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const userRole = getCookie('userRole') || localStorage.getItem('userRole');
@@ -24,7 +24,6 @@ const Dashboard = () => {
     value: String(i + 1),
   }));
 
-  // State management
   const filteredDevices = userRole === 'admin' 
     ? allDevices 
     : allDevices.filter(device => 
@@ -40,20 +39,19 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chartData, setChartData] = useState([]);
+  const [rawHistoricalData, setRawHistoricalData] = useState([]); // ✅ NEW STATE
   const [dateRange, setDateRange] = useState('24hours');
   
   const selectedDeviceLocation = deviceLocations.find(
     (device) => device.id.toString() === selectedDevice.toString()
   );
 
-  // Authentication check
   useEffect(() => {
     if (!getCookie('isAuthenticated') && !localStorage.getItem('isAuthenticated')) {
       navigate('/login', { replace: true });
     }
   }, [navigate]);
 
-  // Fetch real-time data with abort control
   const fetchRealTimeData = async (signal) => {
     try {
       const realTime = await fetchLatestData(selectedDevice, signal);
@@ -83,24 +81,24 @@ const Dashboard = () => {
     }
   };
 
-  // Fetch historical data with abort control
   const fetchAndSetHistoricalData = async (startTime, endTime, signal) => {
     try {
       setLoading(true);
       setError(null);
       const rawData = await fetchHistoricalData(selectedDevice, startTime, endTime, signal);
+      setRawHistoricalData(rawData); // ✅ STORE RAW DATA
       setChartData(processHistoricalData(rawData));
     } catch (err) {
       if (err.name !== 'CanceledError') {
         setError(err.message);
         setChartData([]);
+        setRawHistoricalData([]); // ✅ CLEAR ON ERROR
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // Main data fetch effect with proper cleanup
   useEffect(() => {
     const abortController = new AbortController();
     let isMounted = true;
@@ -145,7 +143,6 @@ const Dashboard = () => {
     };
   }, [selectedDevice]);
 
-  // Handle device not found error
   if (!selectedDeviceLocation) {
     return (
       <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
@@ -156,7 +153,6 @@ const Dashboard = () => {
     );
   }
 
-  // Date range handler
   const handleDateRangeChange = (event) => {
     const range = event.target.value;
     setDateRange(range);
@@ -164,29 +160,28 @@ const Dashboard = () => {
     const ranges = {
       '24hours': 24,
       '7days': 7 * 24,
-      '30days': 30 * 24
+      '30days': 30 * 24,
+      '3months': 90 * 24,
+      '6months': 180 * 24
     };
     const startTime = new Date(now.getTime() - (ranges[range] || 24) * 60 * 60 * 1000).toISOString();
     fetchAndSetHistoricalData(startTime, now.toISOString());
   };
 
   const handleLogout = () => {
-    // Clear cookies
     document.cookie = 'isAuthenticated=; max-age=0; path=/';
     document.cookie = 'userRole=; max-age=0; path=/';
     document.cookie = 'userDevices=; max-age=0; path=/';
-  
-    // Clear localStorage
+
     localStorage.removeItem('isAuthenticated');
     localStorage.removeItem('userRole');
     localStorage.removeItem('userDevices');
-  
+
     navigate('/login');
   };
-  
+
   return (
  <div className="min-h-screen bg-gray-50 p-4 flex flex-col lg:flex-row items-start gap-4">
-  {/* Left Image Section */}
   <div className="hidden lg:flex flex-col justify-center items-center space-y-2 w-[220px] flex-shrink-0">
     <img
       src="/Laaca.jpg"
@@ -196,9 +191,7 @@ const Dashboard = () => {
     <p className="text-center text-gray-500 text-sm">Breathe clean, live green 🌱</p>
   </div>
 
-  {/* Main Dashboard Content */}
   <div className="flex-1 w-full max-w-6xl mx-auto space-y-4">
-    {/* Header Section */}
     <div className="flex flex-col md:flex-row md:items-center md:justify-between">
       <h1 className="text-xl font-bold text-gray-800 mb-2 md:mb-0">WAQIA Dashboard</h1>
       <div className="flex items-center space-x-3">
@@ -209,7 +202,6 @@ const Dashboard = () => {
       </div>
     </div>
 
-    {/* Metrics Cards */}
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       <DataCard title="Temperature" color="text-orange-500" icon={<FaTemperatureHigh />}>
         <div className="h-32">
@@ -230,23 +222,40 @@ const Dashboard = () => {
       </DataCard>
     </div>
 
-    {/* Map & Chart Section */}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {/* Map */}
       <div className="bg-white p-3 rounded-xl shadow-sm h-[350px]">
         <h2 className="text-md font-bold text-gray-700 mb-2">{selectedDeviceLocation.locationTitle}</h2>
         <Heatmap key={selectedDevice} pm25Value={realTimeData.pm25} coordinates={[selectedDeviceLocation.lat, selectedDeviceLocation.lng]} />
       </div>
 
-      {/* Chart */}
       <div className="bg-white p-4 rounded-xl shadow-sm h-[350px]">
-        <div className="flex justify-between items-center mb-3">
-          <label className="block text-sm font-medium text-gray-700">Select Date Range:</label>
-          <select className="border border-gray-300 rounded-md p-1 w-36" onChange={handleDateRangeChange} value={dateRange}>
-            <option value="24hours">Last 24 Hours</option>
-            <option value="7days">Last 7 Days</option>
-            <option value="30days">Last 30 Days</option>
-          </select>
+        <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Select Date Range:</label>
+            <select className="border border-gray-300 rounded-md p-1 w-36" onChange={handleDateRangeChange} value={dateRange}>
+              <option value="24hours">Last 24 Hours</option>
+              <option value="7days">Last 7 Days</option>
+              <option value="30days">Last 30 Days</option>
+              <option value="3months">Last 3 Months</option>
+              <option value="6months">Last 6 Months</option>
+            </select>
+          </div>
+          <button
+            onClick={() => {
+              const blob = new Blob([JSON.stringify(rawHistoricalData, null, 2)], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `device-${selectedDevice}-unprocessed-data-${new Date().toISOString()}.json`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            }}
+            className="bg-green-500 text-white py-1 px-3 rounded-md hover:bg-green-600"
+          >
+            Download Data
+          </button>
         </div>
         <h2 className="text-md font-bold text-gray-700 mb-2">PM 2.5 Levels</h2>
         <div className="h-40">
@@ -264,7 +273,6 @@ const Dashboard = () => {
     </div>
   </div>
 
-  {/* Right Image Section */}
   <div className="w-[220px] flex-shrink-0">
     <img
       src="https://media.istockphoto.com/id/650754962/vector/ecology-air-and-atmosphere-pollution.jpg?s=612x612&w=0&k=20&c=TZhrkmjUly1hgIW3oMwYt2x9J6vui_LTYAYCfqpJpt4="
