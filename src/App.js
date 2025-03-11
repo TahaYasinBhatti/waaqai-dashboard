@@ -2,11 +2,12 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import AllDevicesPM25 from './pages/AllDevicesPM25';
 import 'leaflet/dist/leaflet.css';
 
 // Cookie helper function
 const getCookie = (name) => {
-  if (typeof document === 'undefined') return null; // For server-side rendering
+  if (typeof document === 'undefined') return null; // For SSR
   const cookies = document.cookie.split(';');
   for (let cookie of cookies) {
     const [cookieName, cookieValue] = cookie.split('=');
@@ -18,22 +19,31 @@ const getCookie = (name) => {
 };
 
 function App() {
-  // ✅ Get authentication status from cookies
   const isAuthenticated = getCookie('isAuthenticated') === 'true';
+  const userRole = getCookie('userRole') || localStorage.getItem('userRole');
 
   return (
     <Router>
       <Routes>
-        {/* Route for the Login page */}
         <Route path="/login" element={<Login />} />
 
-        {/* Protected Route for the Dashboard */}
+        {/* Dashboard is still protected by isAuthenticated */}
         <Route
           path="/dashboard"
           element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />}
         />
 
-        {/* Default Route */}
+        {/* Only allow admins to access /all-devices */}
+        <Route
+          path="/all-devices"
+          element={
+            isAuthenticated && userRole === 'admin'
+              ? <AllDevicesPM25 />
+              : <Navigate to="/dashboard" />
+          }
+        />
+
+        {/* Default route */}
         <Route
           path="/"
           element={isAuthenticated ? <Navigate to="/dashboard" /> : <Navigate to="/login" />}

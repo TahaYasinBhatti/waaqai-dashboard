@@ -16,15 +16,30 @@ const LineChart = ({ data }) => {
       <ResponsiveContainer width="100%" height={300}>
         <RechartLineChart data={data}>
           <CartesianGrid stroke="#f5f5f5" />
-          <XAxis 
+          <XAxis
             dataKey="date"
-            tickFormatter={(time) => new Date(time).toLocaleTimeString()}
+            /* Changed to display short date (e.g. "Sep 12") instead of just time */
+            tickFormatter={(time) =>
+              new Date(time).toLocaleDateString(undefined, {
+                month: 'short',
+                day: 'numeric',
+              })
+            }
           />
           <YAxis />
-          <Tooltip 
-            labelFormatter={(time) => new Date(time).toLocaleString()}
+          <Tooltip
+            /* Changed to display full date/time (e.g. "Sep 12, 2025, 3:45 PM") in tooltip */
+            labelFormatter={(time) =>
+              new Date(time).toLocaleString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+            }
           />
-          <Line 
+          <Line
             type="monotone"
             dataKey="value"
             stroke="#ff7300"

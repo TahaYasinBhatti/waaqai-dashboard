@@ -19,15 +19,37 @@ const Dial = ({ value, min, max, unit, colors }) => {
   const cappedValue = Math.max(safeMin, Math.min(value, safeMax));
   const scaledValue = (cappedValue - safeMin) / (safeMax - safeMin);
 
+  // For temperature (°C), define color stops that skip purple/pink:
+  // 1) #00BFFF (blueish)
+  // 2) #00FF80 (greenish)
+  // 3) #FFFF00 (yellow)
+  // 4) #FF8000 (orange)
+  // 5) #FF0000 (red)
+  let dialColors = colors;
+  let nrOfLevels = dialColors?.length || 3;
+  let arcPadding = 0.02;
+
+  if (unit === '°C') {
+    dialColors = [
+      '#00BFFF', // Blueish
+      '#00FF80', // Greenish
+      '#FFA500', // Orange
+      '#FFFF00', // Yellow
+      '#FF0000', // Red
+    ];
+    nrOfLevels = 200;  // Many small segments for smooth blending
+    arcPadding = 0;    // No gap for a continuous arc
+  }
+
   return (
     <div className="flex flex-col items-center justify-center h-full">
       <GaugeChart
         id="gauge-chart"
-        nrOfLevels={colors?.length || 3}
+        nrOfLevels={nrOfLevels}
         percent={scaledValue}
-        colors={colors || ['#00FF00', '#FFBF00', '#FF0000']}
+        colors={dialColors || ['#00FF00', '#FFBF00', '#FF0000']}
         arcWidth={0.3}
-        arcPadding={0.02}
+        arcPadding={arcPadding}
         needleColor="#757575"
         hideText
       />

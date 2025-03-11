@@ -29,15 +29,20 @@ const Dashboard = () => {
     return map;
   }, {});
 
-  const filteredDevices = (userRole === 'admin' 
-    ? allDevices 
-    : allDevices.filter(device => 
+  let filteredDevices = (userRole === 'admin'
+    ? allDevices
+    : allDevices.filter(device =>
         userDevices.some(userDevice => userDevice === device.label)
       )
   ).map(device => ({
     ...device,
     label: labeledDevicesMap[device.value] || device.label
   }));
+
+  // Sort devices alphabetically by their label
+  filteredDevices = filteredDevices.sort((a, b) =>
+    a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })
+  );
 
   const [selectedDevice, setSelectedDevice] = useState(filteredDevices[0]?.value || '1');
   const [realTimeData, setRealTimeData] = useState({
@@ -51,6 +56,9 @@ const Dashboard = () => {
   const [chartData, setChartData] = useState([]);
   const [rawHistoricalData, setRawHistoricalData] = useState([]);
   const [dateRange, setDateRange] = useState('24hours');
+
+  // Keep the dropdown for JSON/CSV downloads
+  const [downloadFormat, setDownloadFormat] = useState('json');
 
   const selectedDeviceLocation = deviceLocations.find(
     (device) => device.id.toString() === selectedDevice.toString()
@@ -74,9 +82,10 @@ const Dashboard = () => {
         temperature: isValidData ? realTime.temperature : 'N/A',
         humidity: isValidData ? realTime.humidity : 'N/A',
         pm25: isValidData ? realTime.pm25 : 'N/A',
-        lastModified: realTime.sourceTime === 'N/A' 
-          ? 'N/A' 
-          : new Date(realTime.sourceTime).toLocaleString()
+        lastModified:
+          realTime.sourceTime === 'N/A'
+            ? 'N/A'
+            : new Date(realTime.sourceTime).toLocaleString(),
       });
     } catch (err) {
       if (err.name !== 'CanceledError') {
@@ -85,7 +94,7 @@ const Dashboard = () => {
           temperature: 'N/A',
           humidity: 'N/A',
           pm25: 'N/A',
-          lastModified: 'N/A'
+          lastModified: 'N/A',
         });
       }
     }
@@ -109,6 +118,18 @@ const Dashboard = () => {
     }
   };
 
+  // Helper: convert dateRange to hours
+  const getHoursForRange = (range) => {
+    const ranges = {
+      '24hours': 24,
+      '7days': 7 * 24,
+      '30days': 30 * 24,
+      '3months': 90 * 24,
+      '6months': 180 * 24,
+    };
+    return ranges[range] || 24;
+  };
+
   useEffect(() => {
     const abortController = new AbortController();
     let isMounted = true;
@@ -119,15 +140,19 @@ const Dashboard = () => {
           temperature: 'N/A',
           humidity: 'N/A',
           pm25: 'N/A',
-          lastModified: 'N/A'
+          lastModified: 'N/A',
         });
 
         const now = new Date();
+
+        // Fetch real-time data
         await fetchRealTimeData(abortController.signal);
 
+        // Fetch historical data using the current dateRange
         if (isMounted) {
+          const hours = getHoursForRange(dateRange);
           await fetchAndSetHistoricalData(
-            new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+            new Date(now.getTime() - hours * 60 * 60 * 1000).toISOString(),
             now.toISOString(),
             abortController.signal
           );
@@ -139,11 +164,21 @@ const Dashboard = () => {
       }
     };
 
-    setLoading(true);
+    // Initial fetch
     fetchData();
 
-    const pollingInterval = setInterval(() => {
-      fetchRealTimeData(abortController.signal);
+    // Polling interval to refresh both real-time & historical data
+    const pollingInterval = setInterval(async () => {
+      const now = new Date();
+      await fetchRealTimeData(abortController.signal);
+      if (isMounted) {
+        const hours = getHoursForRange(dateRange);
+        await fetchAndSetHistoricalData(
+          new Date(now.getTime() - hours * 60 * 60 * 1000).toISOString(),
+          now.toISOString(),
+          abortController.signal
+        );
+      }
     }, 120000);
 
     return () => {
@@ -151,7 +186,8 @@ const Dashboard = () => {
       abortController.abort();
       clearInterval(pollingInterval);
     };
-  }, [selectedDevice]);
+    // Now depends on both selectedDevice & dateRange
+  }, [selectedDevice, dateRange]);
 
   if (!selectedDeviceLocation) {
     return (
@@ -167,15 +203,11 @@ const Dashboard = () => {
     const range = event.target.value;
     setDateRange(range);
     const now = new Date();
-    const ranges = {
-      '24hours': 24,
-      '7days': 7 * 24,
-      '30days': 30 * 24,
-      '3months': 90 * 24,
-      '6months': 180 * 24
-    };
-    const startTime = new Date(now.getTime() - (ranges[range] || 24) * 60 * 60 * 1000).toISOString();
-    fetchAndSetHistoricalData(startTime, now.toISOString());
+    const hours = getHoursForRange(range);
+    fetchAndSetHistoricalData(
+      new Date(now.getTime() - hours * 60 * 60 * 1000).toISOString(),
+      now.toISOString()
+    );
   };
 
   const handleLogout = () => {
@@ -189,6 +221,18 @@ const Dashboard = () => {
 
     navigate('/login');
   };
+
+  // Determine if last update was within 30 minutes
+  const lastModifiedDate =
+    realTimeData.lastModified !== 'N/A' ? new Date(realTimeData.lastModified) : null;
+
+  let isWithin30Mins = false;
+  if (lastModifiedDate && !isNaN(lastModifiedDate)) {
+    const diffMinutes = (new Date() - lastModifiedDate) / (1000 * 60);
+    isWithin30Mins = diffMinutes <= 30;
+  }
+
+  const isAdmin = (userRole === 'admin');
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 flex flex-col lg:flex-row items-start gap-4">
@@ -204,9 +248,45 @@ const Dashboard = () => {
       <div className="flex-1 w-full max-w-6xl mx-auto space-y-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <h1 className="text-xl font-bold text-gray-800 mb-2 md:mb-0">WAQIA Dashboard</h1>
+
           <div className="flex items-center space-x-3">
-            <DeviceDropdown devices={filteredDevices} selectedDevice={selectedDevice} onDeviceChange={setSelectedDevice} />
-            <button onClick={handleLogout} className="bg-red-500 text-white py-1 px-3 rounded-md hover:bg-red-600">
+            {/* Only show these buttons if admin */}
+            {isAdmin && (
+              <>
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className="bg-blue-500 text-white py-1 px-3 rounded-md hover:bg-blue-600"
+                >
+                  Dashboard
+                </button>
+                <button
+                  onClick={() => navigate('/all-devices')}
+                  className="bg-blue-500 text-white py-1 px-3 rounded-md hover:bg-blue-600"
+                >
+                  All Gauges
+                </button>
+              </>
+            )}
+
+            <DeviceDropdown
+              devices={filteredDevices}
+              selectedDevice={selectedDevice}
+              onDeviceChange={setSelectedDevice}
+            />
+
+            {/* Status label and circle on same row */}
+            <div className="flex items-center space-x-1">
+              <span className="text-sm text-gray-600">Status:</span>
+              <div
+                className="w-3 h-3 rounded-full border border-gray-300"
+                style={{ backgroundColor: isWithin30Mins ? '#10B981' : '#EF4444' }}
+              />
+            </div>
+
+            <button
+              onClick={handleLogout}
+              className="bg-red-500 text-white py-1 px-3 rounded-md hover:bg-red-600"
+            >
               Logout
             </button>
           </div>
@@ -215,34 +295,64 @@ const Dashboard = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <DataCard title="Temperature" color="text-orange-500" icon={<FaTemperatureHigh />}>
             <div className="h-32">
-              <Dial value={realTimeData.temperature} min={-10} max={50} unit="°C" colors={['#0000FF', '#00FFFF', '#00FF00', '#FFFF00', '#FFA500', '#FF0000']} />
+              <Dial
+                value={realTimeData.temperature}
+                min={-10}
+                max={50}
+                unit="°C"
+                colors={['#0000FF', '#00FFFF', '#00FF00', '#FFFF00', '#FFA500', '#FF0000']}
+              />
             </div>
           </DataCard>
 
           <DataCard title="Humidity" color="text-blue-500" icon={<FaWater />}>
             <div className="h-32">
-              <Dial value={realTimeData.humidity} min={0} max={100} unit="%" colors={['#ADD8E6', '#87CEEB', '#4682B4', '#000080']} />
+              <Dial
+                value={realTimeData.humidity}
+                min={0}
+                max={100}
+                unit="%"
+                colors={['#ADD8E6', '#87CEEB', '#4682B4', '#000080']}
+              />
             </div>
           </DataCard>
 
           <DataCard title="PM 2.5" color="text-red-500" icon={<FaSmog />}>
             <div className="h-32">
-              <Dial value={realTimeData.pm25} min={0} max={500} unit="µg/m³" colors={['#00E400', '#FFFF00', '#FFA500', '#FF4500', '#8B4513']} />
+              <Dial
+                value={realTimeData.pm25}
+                min={0}
+                max={500}
+                unit="µg/m³"
+                colors={['#00E400', '#FFFF00', '#FFA500', '#FF4500', '#8B4513']}
+              />
             </div>
           </DataCard>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-white p-3 rounded-xl shadow-sm h-[350px]">
-            <h2 className="text-md font-bold text-gray-700 mb-2">{selectedDeviceLocation.locationTitle}</h2>
-            <Heatmap key={selectedDevice} pm25Value={realTimeData.pm25} coordinates={[selectedDeviceLocation.lat, selectedDeviceLocation.lng]} />
+            <h2 className="text-md font-bold text-gray-700 mb-2">
+              {selectedDeviceLocation.locationTitle}
+            </h2>
+            <Heatmap
+              key={selectedDevice}
+              pm25Value={realTimeData.pm25}
+              coordinates={[selectedDeviceLocation.lat, selectedDeviceLocation.lng]}
+            />
           </div>
 
           <div className="bg-white p-4 rounded-xl shadow-sm h-[350px]">
             <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Select Date Range:</label>
-                <select className="border border-gray-300 rounded-md p-1 w-36" onChange={handleDateRangeChange} value={dateRange}>
+                <label className="block text-sm font-medium text-gray-700">
+                  Select Date Range:
+                </label>
+                <select
+                  className="border border-gray-300 rounded-md p-1 w-36"
+                  onChange={handleDateRangeChange}
+                  value={dateRange}
+                >
                   <option value="24hours">Last 24 Hours</option>
                   <option value="7days">Last 7 Days</option>
                   <option value="30days">Last 30 Days</option>
@@ -250,24 +360,75 @@ const Dashboard = () => {
                   <option value="6months">Last 6 Months</option>
                 </select>
               </div>
-              <button
-                onClick={() => {
-                  const blob = new Blob([JSON.stringify(rawHistoricalData, null, 2)], { type: 'application/json' });
-                  const url = URL.createObjectURL(blob);
-                  const link = document.createElement('a');
-                  link.href = url;
-                  link.download = `device-${selectedDevice}-unprocessed-data-${new Date().toISOString()}.json`;
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                  URL.revokeObjectURL(url);
-                }}
-                className="bg-green-500 text-white py-1 px-3 rounded-md hover:bg-green-600"
-              >
-                Download Data
-              </button>
+
+              {/* JSON/CSV download dropdown and button */}
+              <div className="flex items-center space-x-2">
+                <select
+                  value={downloadFormat}
+                  onChange={(e) => setDownloadFormat(e.target.value)}
+                  className="border border-gray-300 rounded-md p-1"
+                >
+                  <option value="json">.json</option>
+                  <option value="csv">.csv</option>
+                </select>
+                <button
+                  onClick={() => {
+                    if (downloadFormat === 'json') {
+                      // JSON download
+                      const blob = new Blob(
+                        [JSON.stringify(rawHistoricalData, null, 2)],
+                        { type: 'application/json' }
+                      );
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = `device-${selectedDevice}-unprocessed-data-${new Date().toISOString()}.json`;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                    } else {
+                      // CSV download
+                      if (rawHistoricalData.length > 0) {
+                        const headers = Object.keys(rawHistoricalData[0]);
+                        const csvRows = [];
+                        // Add header row
+                        csvRows.push(headers.join(','));
+                        // Add data rows
+                        rawHistoricalData.forEach((item) => {
+                          const row = headers.map((h) => {
+                            const val = item[h] == null ? '' : item[h];
+                            // Escape any quotes
+                            return `"${String(val).replace(/"/g, '""')}"`;
+                          });
+                          csvRows.push(row.join(','));
+                        });
+                        const csvContent = csvRows.join('\n');
+                        const blob = new Blob([csvContent], { type: 'text/csv' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `device-${selectedDevice}-unprocessed-data-${new Date().toISOString()}.csv`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                      } else {
+                        alert('No data available to download.');
+                      }
+                    }
+                  }}
+                  className="bg-green-500 text-white py-1 px-3 rounded-md hover:bg-green-600"
+                >
+                  Download Data
+                </button>
+              </div>
             </div>
+
             <h2 className="text-md font-bold text-gray-700 mb-2">PM 2.5 Levels</h2>
+            <div className="mb-2 text-sm text-gray-600">
+              Last Updated: {realTimeData.lastModified}
+            </div>
             <div className="h-40">
               {loading ? (
                 <div className="flex justify-center items-center h-full">
@@ -276,7 +437,9 @@ const Dashboard = () => {
               ) : chartData.length > 0 ? (
                 <LineChart data={chartData} />
               ) : (
-                <div className="flex items-center justify-center h-full text-gray-500">No chart data available</div>
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  No chart data available
+                </div>
               )}
             </div>
           </div>
