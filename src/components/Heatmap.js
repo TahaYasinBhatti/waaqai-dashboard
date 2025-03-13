@@ -6,6 +6,29 @@ import L from "leaflet";
 const Heatmap = ({ pm25Value, coordinates }) => {
   const circleRadius = 1000; // Circle radius in meters
 
+  // PM2.5 color scale (same as your Dial for µg/m³):
+  //  0–5:   #3B82F6 (blue)
+  //  5–10:  #22C55E (green)
+  //  10–15: #FACC15 (yellow)
+  //  15–25: #F97316 (orange)
+  //  25–35: #EF4444 (red)
+  //  35–50: #A855F7 (purple)
+  //  50–100: #D2B48C (light brown)
+  //  100+   : #6D4C41 (dark brown)
+  const getPm25Color = (value) => {
+    if (value <= 5) return "#3B82F6";
+    if (value <= 10) return "#22C55E";
+    if (value <= 15) return "#FACC15";
+    if (value <= 25) return "#F97316";
+    if (value <= 35) return "#EF4444";
+    if (value <= 50) return "#A855F7";
+    if (value <= 100) return "#D2B48C";
+    return "#6D4C41";
+  };
+
+  // Determine circle color based on PM2.5
+  const circleColor = getPm25Color(pm25Value);
+
   // Google Maps-style pin icon
   const pinIcon = L.divIcon({
     className: "google-pin",
@@ -51,7 +74,7 @@ const Heatmap = ({ pm25Value, coordinates }) => {
     `,
     iconSize: [40, 40], // Entire icon size
     iconAnchor: [15, 40], // Anchor point at the pin tip
-    popupAnchor: [0, -40] // Popup appears above the pin
+    popupAnchor: [0, -40], // Popup appears above the pin
   });
 
   return (
@@ -69,8 +92,8 @@ const Heatmap = ({ pm25Value, coordinates }) => {
         center={coordinates}
         radius={circleRadius}
         pathOptions={{
-          fillColor: pm25Value > 150 ? "red" : pm25Value > 100 ? "orange" : "green",
-          color: pm25Value > 150 ? "red" : pm25Value > 100 ? "orange" : "green",
+          fillColor: circleColor,
+          color: circleColor,
           fillOpacity: 0.2,
         }}
       />
