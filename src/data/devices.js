@@ -2,10 +2,10 @@
 export const devices = [
     {
       id: '1',
-      label: 'UOL 1',
-      lat: 31.391152245253327,
-      lng: 74.2416516422834,
-      locationTitle: 'The University of Lahore(UOL)',
+      label: 'BNU 3',
+      lat: 31.365107363036493,
+      lng: 74.21611494805774,
+      locationTitle: 'Beaconhouse National University (BNU)',
     },
     {
       id: '2',
@@ -75,10 +75,10 @@ export const devices = [
       },
     {
         id: '11',
-        label: 'UOL 2',
-        lat: 31.391152245253327,
-        lng: 74.2416516422834,
-        locationTitle: 'The University of Lahore(UOL)',
+        label: 'BNU 4',
+        lat: 31.365107363036493,
+        lng: 74.21611494805774,
+        locationTitle: 'Beaconhouse National University (BNU)',
       },
 
     {
